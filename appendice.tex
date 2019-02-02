@@ -1,0 +1,428 @@
+\chapter{Codice}
+\section{Broker}
+\begin{lstlisting}[language=Java, caption={broker.js}, label={lst:broker}]
+var mosca = require('mosca')
+var redis = require('redis')
+const SECURE_KEY = __dirname + './tesi/secure/tls-key.pem';
+const SECURE_CERT = __dirname + './tesi/secure/tls-cert.pem';
+
+var backend = {
+  type: 'redis',
+  redis: redis,
+  host: process.env.REDIS_HOST,
+  port: process.env.REDIS_PORT,
+  db: process.env.REDIS_DB,
+  return_buffers: true, // to handle binary payloads
+  ttl: {
+    subscriptions: 2000
+  }
+};
+
+var settings = {
+  port: 1883,
+  backend: backend,
+  secure : {
+    port: 8443,
+    keyPath: SECURE_KEY,
+    certPath: SECURE_CERT,
+  }
+};
+
+var server = new mosca.Server(settings);
+server.on('clientConnected', function(client) {
+	console.log('client connected', client.id);
+});
+
+// fired when a message is received
+server.on('published', function(packet, client) {
+  console.log('Published', packet.topic, packet.payload);
+});
+
+server.on('subscribed', function(packet, client) {
+  console.log('Subscribed ', packet.topic, packet.payload);
+});
+
+server.on('ready', setup);
+
+// fired when the mqtt server is ready
+function setup() {
+  console.log('Mosca server is up and running')
+}
+\end{lstlisting}
+\newpage
+
+\section{Topic Listener}
+\begin{lstlisting}[language=javascript, caption={topic.js}, label={lst:topic}]
+const mqtt = require("mqtt");
+const redis = require("redis");
+const utils = require("./utils");
+const config = require("./config.json");
+const topic_url = "topic/";
+
+const redis_client = redis.createClient(
+  port = config.redis.port,
+  host = config.redis.host
+);
+redis_client.select(config.redis.db);
+
+ // Number of milliseconds after which a new call
+ // to create/delete topics inside the authorization service is done
+const API_CALL_INTERVALL = 2000;
+ // Number of milliseconds after which a topic is deleted
+ // if it doesn't receive data
+const TOPIC_EXP = 8000;
+// Char used to identify a new topic from one that has already been sent.
+// /0 new topic; /1 topic sent
+const BIT_NEW = "/0";
+const BIT_OLD = "/1";
+
+const client = mqtt.connect(config.broker.host, {
+  username: config.broker.username,
+  password: config.broker.password
+});
+
+client.on("connect", function () {
+  // Subscribe to all topic
+  // Only staff user can
+  client.subscribe('#');
+});
+
+client.on("message", function (topic, message) {
+  const timestamp = new Date().getTime().toString();
+  redis_client.hmget(`topic`, topic, (err, obj) => {
+    if (!obj[0]) {
+      // Insert a new topic with /0 => to be inserted
+      redis_client.hmset(`topic`, topic, timestamp + BIT_NEW);
+    } else {
+      let bit = obj[0].split('/')[1]
+      // Change just the timestamp
+      redis_client.hmset(`topic`, topic, timestamp + `/${bit}`);
+    }
+  });
+});
+
+setInterval(
+  function () {
+    let create_data = [],
+      delete_data = [],
+      now = new Date().getTime(),
+      i,
+      topic,
+      timestamp,
+      bit,
+      publisher;
+    redis_client.hgetall("topic", function (err, topics) {
+      for (topic in topics) {
+        timestamp = Number(topics[topic].split("/")[0]);
+        bit = Number(topics[topic].split("/")[1]);
+        if (now - timestamp > EXP_TIME) {
+          // expired
+          delete_data.push({
+            title: topic
+          });
+          redis_client.hdel("topic", topic);
+        } else if (bit === 0) {
+          publisher = topic.split('/')[1];
+          // new topics
+          create_data.push({
+            publisher: publisher,
+            title: topic
+          });
+          redis_client.hmset(
+            "topic",
+            topic,
+            timestamp.toString() + BIT_OLD
+          );
+        }
+      }
+      // Call the api to save/delete topics
+      const len_create_data = create_data.length;
+      const len_delete_data = delete_data.length;
+      if (len_create_data > 0) {
+        utils.http.post(topic_url, create_data)
+        .catch(function (error) {
+          // inserisci di nuovo con il char a /0 per riprovare
+          timestamp = new Date().getTime();
+          for (i = 0; i < create_data.length; i += 1) {
+            redis_client.hmset(
+              "topic",
+              create_data[i]["title"],
+              timestamp.toString() + BIT_NEW
+            );
+          }
+        })
+      }
+      if (len_delete_data > 0) {
+        utils.http.delete(topic_url, { data: delete_data })
+        .catch(function (error) {
+          // inserisci di nuovo con un timestamp scaduto per riprovare
+          // now - exp_timestamp > EXP_TIME => true
+          let exp_timestamp = Number(now) - EXP_TIME - 1;
+          for (i = 0; i < delete_data.length; i += 1) {
+            redis_client.hmset(
+              "topic",
+              delete_data[i]["title"],
+              exp_timestamp.toString() + BIT_OLD
+            );
+          }
+        })
+      }
+    })
+  },
+  API_CALL_INTERVALL
+);
+\end{lstlisting}
+\newpage
+
+\section{Axios Header API Key}
+\begin{footnotesize}
+\begin{verbatim}
+const http = axios.create({
+  baseURL: api_url,
+  timeout: 10000,
+  headers: {
+    'Api-Token': 'c5d87617ceefd2d7b44f2915fd3acbd7',
+    'Api-Secret-Key': 'G1V566Zgh5tf'
+  }
+});
+\end{verbatim}
+\end{footnotesize}
+
+\newpage
+\section{Broker Authentication}
+\begin{footnotesize}
+\begin{verbatim}
+var authenticate = function(client, username, password, callback) {
+  const authentication_url = 'mqtt/login/';
+  http.post(authentication_url, {
+    username: username,
+    password: password.toString()
+  })
+  .then(function (response) {
+    // handle success
+    const authenticated = response.status === 200;
+    if (authenticated) client.user = username;
+    callback(null, authenticated);
+  })
+  .catch(function (error) {
+    // handle error
+    callback(null, false);
+  })
+}
+\end{verbatim}
+\end{footnotesize}
+
+\newpage
+\section{Publisher Authentication}
+\begin{footnotesize}
+\begin{verbatim}
+var authorizePublish = function(client, topic, payload, callback) {
+  // Authorized only if topic equal to /username/..
+  const authorized = client.user == topic.split('/')[1];
+  if (authorized) {
+    // Try fetching the result from Redis
+    redis_client.get(`${client.user}:${topic}`, (err, result) => {
+      // If that key exist in Redis store
+      if (result === 'false') {
+          callback(null, false);
+      } else if (result === 'true') {
+          callback(null, true);
+      } else { // Key does not exist in Redis store
+        // Create a new topic associated to the user
+        http.post('topic/', {
+          title: topic,
+          publisher: client.user
+        })
+        .then(function (response) {
+          redis_client.setex(`${client.user}:${topic}`, 3600, response.status < 300);
+          callback(null, response.status < 300);
+        })
+        .catch(function (error) {
+          // handle error
+          redis_client.setex(`${client.user}:${topic}`, 600, false);
+          callback(null, false);
+        })
+      }
+    });
+  } else {
+    callback(null, false);
+  }
+}
+
+\end{verbatim}
+\end{footnotesize}
+
+
+\newpage
+\section{Subscriber Authorization}
+\begin{footnotesize}
+\begin{verbatim}
+
+async function canSubscribe(subscriber, topic) {
+  const authorization_url = 'mqtt/auth/';
+  await http.post(authorization_url, {
+    username: subscriber,
+    topic: topic
+  })
+  .then(function (response) {
+    // handle success
+    console.log(response);
+    redis_client.setex(`${subscriber}:subscribe:${topic}`, 3600, response.status < 300);
+    return response.status < 300;
+  })
+  .catch(function (error) {
+    // handle error
+    redis_client.setex(`${subscriber}:subscribe:${topic}`, 600, false);
+    return false;
+  })
+}
+
+var authorizeForward = function (client, packet, callback) {
+  redis_client.get(`${client.user}:subscribe:${packet.topic}`, (err, result) => { 
+    if (result === 'false') {
+      callback(null, false);
+    } else if (result === 'true') {
+      callback(null, true);
+    } else { // Key does not exist in Redis store
+      callback(null, canSubscribe(client, packet.topic))
+    }
+  })
+}
+var authorizeSubscribe = function(client, topic, callback) {
+  callback(null, canSubscribe(client.user, topic))
+}
+\end{verbatim}
+\end{footnotesize}
+
+\newpage
+\section{Publisher}
+\begin{footnotesize}
+\begin{verbatim}
+var mqtt = require('mqtt');
+const SDS011Wrapper = require("sds011-wrapper");
+const sensor = new SDS011Wrapper("COM5");
+Promise
+    .all([sensor.setReportingMode('active'), sensor.setWorkingPeriod(10)])
+    .then(() => {
+        // everything's set
+    });
+var client = mqtt.connect(`mqtt://${host}`, {
+  username: process.env.MQTT_PUBLISHER_USERNAME,
+  password: process.env.MQTT_PUBLISHER_PASSWORD
+});
+
+client.on('connect', function () {
+  sensor.on('measure', (data) => {
+    var topic = `/${process.env.MQTT_PUBLISHER_USERNAME}/tesi/pm10`;
+    client.publish(topic, data['PM10'])
+  });
+});
+\end{verbatim}
+\end{footnotesize}
+
+
+\newpage
+\section{Subscriber}
+\begin{footnotesize}
+\begin{verbatim}
+var mqtt = require('mqtt')
+var client = mqtt.connect(`mqtt://${host}`, {
+  username: 'subscriber',
+  password: 'SgePnQ8fDShnyC3ZdTAy5ZGaW0rSVwVtDVO1QF1kuNs'
+});
+
+client.on('connect', function () {
+  client.subscribe('/admin/hello')
+})
+
+client.on('message', function (topic, message) {
+  let context = message.toString();
+  console.log(context);
+})
+\end{verbatim}
+\end{footnotesize}
+
+\newpage
+\section{Publisher PGP}
+\begin{footnotesize}
+\begin{verbatim}
+const api_url = process.env.API_URL;
+const http = axios.create({
+  baseURL: api_url,
+  timeout: 10000,
+  headers: {
+    'Authorization': `JWT ${process.env.API_TOKEN}`
+  }
+});
+const privkey = process.env.PRIVATE_KEY;
+/**
+ * Get the public keys for all the subscribers calling the restful api
+ *
+ * @param {*} topic
+ * @returns array of string
+ */
+async function getPubKeys(topic) {
+  
+  // Call api and get subscribers pub keys
+  return await http.get(`${topic}/subscribers`)
+  .then(function (response) {
+    // handle success
+    let keys = [];
+    console.log(response);
+    if (response) {
+       for (let i = 0; i < response.length; i++) {
+        keys.push(response[i].pubkey)
+       }
+    }
+    return keys
+  })
+  .catch(function (error) {
+    // handle error
+    return [];
+  })
+}
+
+
+async function encryptWithMultiplePublicKeys(pubkeys, privkey, message) {
+  const privKeyObj = (await openpgp.key.readArmored(privkey)).keys[0]
+
+  pubkeys = pubkeys.map(async (key) => {
+    return (await openpgp.key.readArmored(key)).keys[0]
+  });
+
+  const options = {
+      message: openpgp.message.fromText(message),
+      publicKeys: pubkeys,           				  // for encryption
+      privateKeys: [privKeyObj]                                 // for signing (optional)
+  }
+
+  return openpgp.encrypt(options).then(ciphertext => {
+      encrypted = ciphertext.data // '-----BEGIN PGP MESSAGE ... END PGP MESSAGE-----'
+      return encrypted
+  })
+};
+
+
+var client = mqtt.connect('mqtt://localhost', {
+  username: process.env.MQTT_USERNAME,
+  password: process.env.MQTT_PASSWORD
+});
+
+client.on('connect', function () {
+  var topic = '/admin/pm10/';
+  let pubkeys = getPubKeys(topic);
+  setInterval(function() {
+    var message = encryptWithMultiplePublicKeys(pubkeys, privkey, '', '100')
+    client.publish(topic, message)
+    console.log(`Message Sent from ${topic}`);
+  }, 20000);
+});
+\end{verbatim}
+\end{footnotesize}
+
+
+\section{broker.js}
+\begin{footnotesize}
+\begin{verbatim}
+\end{verbatim}
+\end{footnotesize}

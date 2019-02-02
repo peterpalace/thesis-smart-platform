@@ -1,0 +1,179 @@
+\documentclass[a4paper,12pt]{report}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%% Definizioni:
+\def\titolotesi{Smart City dalla teoria alla pratica} % INSERIRE TIOLO DELLA TESI
+\def\laureando{Pietro Palazzo}       % INSERTIRE NOME COGNOME LAUREANDO
+\def\annoaccademico{2017--2018}    % INSERIRE ANNO ACCADEMICO
+\def\dedica{Dedica...}      % INSERIRE DEDICA
+
+% Title Page
+\title{\begin{large}\textbf{\titolotesi}\end{large}}
+\author{\laureando}
+\usepackage[italian]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8x]{inputenc}
+\usepackage{minted}
+\usepackage[square,numbers]{natbib}
+\usepackage{listings}
+\usepackage{color}
+\usepackage[colorlinks=true]{hyperref}
+\hypersetup{
+	bookmarksnumbered=true,
+	linkcolor=black,
+	citecolor=black,
+	pagecolor=black,
+	urlcolor=black,
+}
+\definecolor{lightgray}{rgb}{.9,.9,.9}
+\definecolor{darkgray}{rgb}{.4,.4,.4}
+\definecolor{purple}{rgb}{0.65, 0.12, 0.82}
+
+\lstdefinelanguage{JavaScript}{
+  keywords={typeof, new, true, false, catch, function, return, null, catch, switch, var, if, in, while, do, else, case, break, Number},
+  keywordstyle=\color{blue}\bfseries,
+  ndkeywords={class, export, boolean, throw, implements, import, this},
+  ndkeywordstyle=\color{darkgray}\bfseries,
+  identifierstyle=\color{black},
+  sensitive=false,
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  commentstyle=\color{purple}\ttfamily,
+  stringstyle=\color{red}\ttfamily,
+  morestring=[b]',
+  morestring=[b]"
+}
+\lstset{
+   language=JavaScript,
+   backgroundcolor=\color{lightgray},
+   extendedchars=true,
+   basicstyle=\fontsize{9}{13}\selectfont\ttfamily,%\footnotesize\ttfamily,
+   showstringspaces=false,
+   showspaces=false,
+   numbers=left,
+   numberstyle=\footnotesize,
+   numbersep=9pt,
+   tabsize=2,
+   breaklines=true,
+   showtabs=false,
+   captionpos=b,
+}
+\usepackage{url}
+
+\usepackage{fancyhdr}
+\fancyhf{}
+\fancyhead[RO]{\the\chaptermark}
+\fancyfoot[LE,RO]{ \thepage \hfil}
+\usepackage{epsfig}
+\pagenumbering{roman}
+%\usepackage{setspace}
+\newlength\sinistra
+\newlength\corpo
+\newlength\pagina
+\setlength {\pagina} {21cm}
+\setlength {\sinistra} {1.46cm}
+\setlength {\corpo} {13.5cm}
+\textwidth \the\corpo
+\hoffset \the\sinistra
+\paperwidth \the\pagina
+\linespread{1.6}
+
+\graphicspath{ {./images/} }
+
+\begin{document}
+
+\begin{titlepage}
+ \begin{center}
+\textsc{\Large Universit\`a degli Studi di Perugia}\medskip\\
+
+{\Large Dipartimento di Matematica e Informatica}\medskip\\
+
+\rule{10mm}{0.01mm}\medskip\\
+
+{\small \textsc{Corso di Laurea Magistrale in Informatica}}\medskip\\
+
+\vspace*{3mm}
+
+\includegraphics[scale=0.70]{logounipg.png}
+
+\Large Tesi di Laurea \par\bigskip
+
+{\large \bf \titolotesi \par}
+
+\end{center}\par
+
+\hspace{0.05cm}Laureando:\hspace{7.3cm}Relatore:\par
+
+\hspace{0.0cm}\emph{\laureando}\hfill\emph{Prof.~Osvaldo Gervasi}\\
+
+\hspace{10cm}Tutor:\par
+
+\hfill\emph{ecosteer - Daniel Grazioli}\\
+
+\vfill
+
+\begin{center}
+\rule{40mm}{0.01mm}\\
+Anno Accademico \annoaccademico
+\end{center}
+\end{titlepage}
+\newpage
+
+% DEDICA
+\vspace*{\stretch{1}}
+\begin{flushright}
+\noindent
+A mio padre, per aver detto l'essenziale
+\end{flushright}
+\vspace*{\stretch{6}}
+\cleardoublepage
+
+% CITAZIONE
+\vspace*{\stretch{1}}
+\begin{flushright}
+\noindent
+Questa nostra terra, che un tempo ci sembrava infinitamente grande, deve essere considerata nella sua piccolezza. Viviamo in un sistema chiuso, dipendenti gli uni dagli altri e dipendenti tutti dalla terra stessa. Tutto ciò che ci divide è infinitamente meno importante del pericolo che ci unisce.
+
+\textit{Charles Darwin}
+\end{flushright}
+\vspace*{\stretch{6}}
+\cleardoublepage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\tableofcontents
+\listoffigures
+%%%% fine prologo
+
+%%%% Inizio corpo tesi
+\pagestyle{fancy}
+\fancyhead[RO]{\bfseries Introduzione}
+\addcontentsline{toc}{chapter}{Introduzione}
+\input{introduzione}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% CHAPTERS
+
+\input{capitolo1}
+\input{capitolo2}
+\input{capitolo3}
+
+%%%%%%%%%%%% CONCLUSIONI   (non numerate come per l'introduzione)
+\addcontentsline{toc}{chapter}{conclusioni}
+\fancyhead[RO]{\bfseries conclusioni}
+\input{conclusioni}
+\newpage 
+
+%%%%%%%%%%%% BIBLIOGRAFIA
+\bibliographystyle{abbrvnat}
+\bibliography{bibliografia} 
+\newpage 
+
+%%%%%%%%%%%% APPENDIX
+\appendix
+\linespread{1}
+\fancyhead[RO]{\bfseries Codice}
+\input{appendice}
+
+\end{document}
+
+
+  
